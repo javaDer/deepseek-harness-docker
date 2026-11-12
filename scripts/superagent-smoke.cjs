@@ -55,7 +55,7 @@ async function api(path, method = 'GET', body) {
   run(['run', '-d', '--name', container, '--publish', `127.0.0.1:${port}:3080`, '--read-only',
     '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=512m', '--tmpfs', '/workspace:rw,nosuid,nodev,size=512m,uid=1000,gid=1000',
     '--shm-size', '1g', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true', '--pids-limit', '512',
-    '--env', `DSH_SUPERAGENT_PUBLIC_PORT=${port}`, '--volume', `${volume}:/home/node/.dsh`, image]);
+    '--env', `DSH_SUPERAGENT_PUBLIC_PORT=${port}`, '--env', 'DSH_SUPERAGENT_TRUSTED_ORIGIN=https://dsh.931217.xyz', '--volume', `${volume}:/home/node/.dsh`, image]);
   await signIn();
   assert.equal((await fetch(`http://127.0.0.1:${port}/`)).status, 401);
   assert.equal((await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { 'x-orchestrator-request': '1' } })).status, 401);
@@ -67,6 +67,17 @@ async function api(path, method = 'GET', body) {
   })).status, 401);
   const badOrigin = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { cookie, origin: 'https://evil.example', 'x-orchestrator-request': '1' } });
   assert.equal(badOrigin.status, 403);
+  const publicState = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' } });
+  assert.equal(publicState.status, 200);
+  for (const [headers, expected] of [
+    [{ host: 'evil.example', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', origin: 'https://evil.example', cookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie }, 403],
+    [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', 'x-orchestrator-request': '1' }, 401],
+  ]) {
+    const rejected = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers });
+    assert.equal(rejected.status, expected);
+  }
   const state = await api('state'); assert.equal(state.paused, true); assert.equal(state.load.running, 0); assert.equal(state.load.queued, 0); assert.equal(state.setup.accounts, null);
   let settings = await api('settings');
   assert(settings.sources.every(source => !source.value.enabled), 'Source was enabled by default');

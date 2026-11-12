@@ -22,16 +22,26 @@
    const machine = machineOf(config)
 --- a/src/app/http.ts
 +++ b/src/app/http.ts
-@@ -74,7 +74,10 @@
+@@ -74,7 +74,19 @@
  }
  export function sameOrigin(req: Pick<IncomingMessage, 'headers'>, port: number): boolean {
    const host = req.headers.host
 -  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false
++  const marker = req.headers['x-orchestrator-request'] === '1'
++  if (!marker || typeof host !== 'string') return false
 +  // Container publishing may use a different, explicitly configured loopback port.
 +  const published = process.env.DSH_SUPERAGENT_PUBLIC_PORT
 +  const ports = [port, ...(published && /^[1-9]\d{0,4}$/.test(published) && Number(published) <= 65535 ? [Number(published)] : [])]
-+  if (!ports.some(value => host === `127.0.0.1:${value}` || host === `localhost:${value}`)) return false
-   return req.headers['x-orchestrator-request'] === '1' && (req.headers.origin === undefined || req.headers.origin === `http://${host}`)
++  const loopback = ports.some(value => host === `127.0.0.1:${value}` || host === `localhost:${value}`)
++  if (loopback) return req.headers.origin === undefined || req.headers.origin === `http://${host}`
++  // Optional public origin is exact, HTTPS-only, and never a pattern. It also
++  // binds Host to the origin authority; no forwarded headers are trusted here.
++  const configured = process.env.DSH_SUPERAGENT_TRUSTED_ORIGIN
++  if (!configured || !/^https:\/\/[^*\s/]+$/.test(configured)) return false
++  let trusted: URL
++  try { trusted = new URL(configured); if (trusted.pathname !== '/' || trusted.search || trusted.hash || trusted.username || trusted.password) return false } catch { return false }
++  return host === trusted.host && req.headers.origin === configured
+-  return req.headers['x-orchestrator-request'] === '1' && (req.headers.origin === undefined || req.headers.origin === `http://${host}`)
  }
  /** Maps errors to HTTP status codes and structured payloads that the panel localizes in the interface language. */
 @@ -235,6 +238,12 @@
