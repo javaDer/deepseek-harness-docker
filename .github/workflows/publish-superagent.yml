@@ -12,7 +12,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: runzhliu/deepseek-harness
   GHCR_IMAGE: ghcr.io/runzhliu/deepseek-harness
   SUPERAGENT_IMAGE_VERSION: 0.2.2-rc.2-r1-superagent.1
 
@@ -38,16 +37,12 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
-          username: runzhliu
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/login-action@v4
-        with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Refuse immutable tag overwrite
         run: |
-          for registry in "${IMAGE}" "${GHCR_IMAGE}"; do
+          for registry in "${GHCR_IMAGE}"; do
             for tag in "${SUPERAGENT_IMAGE_VERSION}" "${SUPERAGENT_IMAGE_VERSION}-${{ matrix.arch }}"; do
               if docker buildx imagetools inspect "${registry}:${tag}" >/dev/null 2>&1; then
                 echo "refusing to overwrite ${registry}:${tag}" >&2
@@ -73,7 +68,7 @@ jobs:
         run: node scripts/superagent-smoke.cjs localhost/deepseek-harness:superagent-${{ matrix.arch }}
       - name: Push only tested platform images
         run: |
-          for registry in "${IMAGE}" "${GHCR_IMAGE}"; do
+          for registry in "${GHCR_IMAGE}"; do
             ref="${registry}:${SUPERAGENT_IMAGE_VERSION}-${{ matrix.arch }}"
             docker tag localhost/deepseek-harness:superagent-${{ matrix.arch }} "${ref}"
             docker push "${ref}"
@@ -87,16 +82,12 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
-          username: runzhliu
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/login-action@v4
-        with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Merge tested platforms without overwriting a release
         run: |
-          for registry in "${IMAGE}" "${GHCR_IMAGE}"; do
+          for registry in "${GHCR_IMAGE}"; do
             ref="${registry}:${SUPERAGENT_IMAGE_VERSION}"
             if docker buildx imagetools inspect "${ref}" >/dev/null 2>&1; then
               echo "refusing to overwrite ${ref}" >&2
@@ -108,13 +99,11 @@ jobs:
           done
       - name: Verify registry parity
         run: |
-          for registry in "${IMAGE}" "${GHCR_IMAGE}"; do
+          for registry in "${GHCR_IMAGE}"; do
             docker buildx imagetools inspect --raw "${registry}:${SUPERAGENT_IMAGE_VERSION}" \
               | jq -r '.manifests[] | [.platform.os,.platform.architecture,.digest] | @tsv' | sort \
               > "/tmp/$(echo "${registry}" | tr / _).tsv"
           done
-          source="/tmp/$(echo "${IMAGE}" | tr / _).tsv"
           target="/tmp/$(echo "${GHCR_IMAGE}" | tr / _).tsv"
-          diff -u "${source}" "${target}"
           grep -q $'linux\tamd64\t' "${target}"
           grep -q $'linux\tarm64\t' "${target}"
