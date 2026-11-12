@@ -36,13 +36,23 @@ async function signIn() {
   throw Error('Super Agent authenticated Web did not become ready');
 }
 // fetch() cannot override Host; node:http sends exactly the authority under test.
-function rawState(headers) {
+function raw(path, headers) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: '/orchestrator/api/state', headers, timeout: 15000 }, res => {
-      let body = ''; res.setEncoding('utf8'); res.on('data', chunk => { body += chunk; }); res.on('end', () => resolve({ status: res.statusCode, body }));
+    const req = http.request({ host: '127.0.0.1', port, path, headers, timeout: 15000 }, res => {
+      let body = ''; res.setEncoding('utf8'); res.on('data', chunk => { body += chunk; }); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
     });
     req.on('timeout', () => req.destroy(Error('request timed out'))); req.on('error', reject); req.end();
   });
+}
+const rawState = headers => raw('/orchestrator/api/state', headers);
+// DSH binds its session to the authority that redeemed the launch token, so
+// sign in exactly as the browser would through the public HTTPS proxy.
+async function publicSignIn() {
+  const token = [...run(['logs', container]).matchAll(/dsh web: http:\/\/127\.0\.0\.1:\d+\/\?token=([^\s)]+)/g)].at(-1)?.[1];
+  assert(token, 'launch token missing');
+  const login = await raw('/?token=' + encodeURIComponent(token), { host: 'dsh.931217.xyz' });
+  assert([302, 303, 307].includes(login.status), 'public sign-in status ' + login.status);
+  return (login.headers['set-cookie'] || []).map(value => value.split(';')[0]).join('; ');
 }
 async function api(path, method = 'GET', body) {
   const r = await fetch(`http://127.0.0.1:${port}/orchestrator/api/${path}`, {
@@ -77,14 +87,15 @@ async function api(path, method = 'GET', body) {
   })).status, 401);
   const badOrigin = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { cookie, origin: 'https://evil.example', 'x-orchestrator-request': '1' } });
   assert.equal(badOrigin.status, 403);
-  const publicState = await rawState({ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' });
+  const publicCookie = await publicSignIn();
+  const publicState = await rawState({ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' });
   assert.equal(publicState.status, 200, 'public origin rejected: ' + publicState.body);
   for (const [headers, expected] of [
-    [{ host: 'evil.example', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
-    [{ host: 'dsh.931217.xyz', origin: 'https://evil.example', cookie, 'x-orchestrator-request': '1' }, 403],
-    [{ host: 'dsh.931217.xyz', origin: 'http://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
-    [{ host: 'dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
-    [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie }, 403],
+    [{ host: 'evil.example', origin: 'https://dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', origin: 'https://evil.example', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', origin: 'http://dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie: publicCookie }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', 'x-orchestrator-request': '1' }, 401],
   ]) {
     const rejected = await rawState(headers);
