@@ -14,7 +14,7 @@ RUN curl --fail --location --retry 3 --output /tmp/superagent.tar.gz \
     && npm install --global --ignore-scripts --no-audit --no-fund "pnpm@${SUPERAGENT_PNPM_VERSION}" \
     && pnpm install --frozen-lockfile --ignore-scripts
 COPY superagent/container-compat.patch /tmp/container-compat.patch
-RUN patch -p1 < /tmp/container-compat.patch \
+RUN patch --no-backup-if-mismatch -p1 < /tmp/container-compat.patch \
     && pnpm exec tsc --noEmit \
     && pnpm exec vitest run --maxWorkers=2 \
     && pnpm run build \
