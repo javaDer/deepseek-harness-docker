@@ -68,7 +68,8 @@ async function api(path, method = 'GET', body) {
   const badOrigin = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { cookie, origin: 'https://evil.example', 'x-orchestrator-request': '1' } });
   assert.equal(badOrigin.status, 403);
   const publicState = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' } });
-  assert.equal(publicState.status, 200);
+  const publicBody = await publicState.text();
+  assert.equal(publicState.status, 200, 'public origin rejected: ' + publicBody);
   for (const [headers, expected] of [
     [{ host: 'evil.example', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'https://evil.example', cookie, 'x-orchestrator-request': '1' }, 403],
