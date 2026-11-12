@@ -1,4 +1,18 @@
 #!/bin/sh
 set -eu
 node /opt/deepseek-harness/superagent-init.cjs "$@"
+# Keep DSH's own trusted-host boundary aligned with the single exact HTTPS
+# origin accepted by the Super Agent management API. Empty means loopback only.
+origin="${DSH_SUPERAGENT_TRUSTED_ORIGIN:-}"
+if [ -n "${origin}" ]; then
+  host="${origin#https://}"
+  case "${origin}" in https://*) ;; *) echo "DSH_SUPERAGENT_TRUSTED_ORIGIN must be an exact https:// origin" >&2; exit 1 ;; esac
+  case "${host}" in ''|*[!A-Za-z0-9.:-]*) echo "DSH_SUPERAGENT_TRUSTED_ORIGIN must be an exact https:// origin without path or wildcard" >&2; exit 1 ;; esac
+  case " $* " in
+    *" --trusted-host "*) ;;
+    *) case "${1:-}" in
+         web|--profile) set -- "$@" --trusted-host "${host}" ;;
+       esac ;;
+  esac
+fi
 exec /usr/local/bin/deepseek-harness-market-entrypoint "$@"
