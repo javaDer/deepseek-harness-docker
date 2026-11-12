@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const cp = require('node:child_process');
 const net = require('node:net');
 const crypto = require('node:crypto');
+const http = require('node:http');
 const image = process.argv[2] || 'docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r1-superagent.1';
 const suffix = `${process.pid}-${crypto.randomBytes(3).toString('hex')}`;
 const container = 'dsh-superagent-smoke-' + suffix;
@@ -33,6 +34,15 @@ async function signIn() {
     await sleep(1000);
   }
   throw Error('Super Agent authenticated Web did not become ready');
+}
+// fetch() cannot override Host; node:http sends exactly the authority under test.
+function rawState(headers) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/orchestrator/api/state', headers, timeout: 15000 }, res => {
+      let body = ''; res.setEncoding('utf8'); res.on('data', chunk => { body += chunk; }); res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('timeout', () => req.destroy(Error('request timed out'))); req.on('error', reject); req.end();
+  });
 }
 async function api(path, method = 'GET', body) {
   const r = await fetch(`http://127.0.0.1:${port}/orchestrator/api/${path}`, {
@@ -67,17 +77,18 @@ async function api(path, method = 'GET', body) {
   })).status, 401);
   const badOrigin = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { cookie, origin: 'https://evil.example', 'x-orchestrator-request': '1' } });
   assert.equal(badOrigin.status, 403);
-  const publicState = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' } });
-  const publicBody = await publicState.text();
-  assert.equal(publicState.status, 200, 'public origin rejected: ' + publicBody);
+  const publicState = await rawState({ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' });
+  assert.equal(publicState.status, 200, 'public origin rejected: ' + publicState.body);
   for (const [headers, expected] of [
     [{ host: 'evil.example', origin: 'https://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'https://evil.example', cookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', origin: 'http://dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', cookie, 'x-orchestrator-request': '1' }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', 'x-orchestrator-request': '1' }, 401],
   ]) {
-    const rejected = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers });
-    assert.equal(rejected.status, expected);
+    const rejected = await rawState(headers);
+    assert.equal(rejected.status, expected, JSON.stringify(Object.keys(headers)) + ' ' + rejected.body);
   }
   const state = await api('state'); assert.equal(state.paused, true); assert.equal(state.load.running, 0); assert.equal(state.load.queued, 0); assert.equal(state.setup.accounts, null);
   let settings = await api('settings');
