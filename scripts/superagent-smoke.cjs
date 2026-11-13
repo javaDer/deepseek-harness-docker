@@ -77,14 +77,14 @@ async function api(path, method = 'GET', body) {
     '--shm-size', '1g', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true', '--pids-limit', '512',
     '--env', `DSH_SUPERAGENT_PUBLIC_PORT=${port}`, '--env', 'DSH_SUPERAGENT_TRUSTED_ORIGIN=https://dsh.931217.xyz', '--volume', `${volume}:/home/node/.dsh`, image]);
   await signIn();
-  assert.equal((await fetch(`http://127.0.0.1:${port}/`)).status, 401);
-  assert.equal((await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { 'x-orchestrator-request': '1' } })).status, 401);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/`)).status, 401, 'index without cookie');
+  assert.equal((await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { 'x-orchestrator-request': '1' } })).status, 401, 'state without cookie');
   assert.equal((await fetch(`http://127.0.0.1:${port}/orchestrator/api/executor/resume`, {
     method: 'POST', headers: { 'x-orchestrator-request': '1' },
-  })).status, 401);
+  })).status, 401, 'resume without cookie');
   assert.equal((await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, {
     headers: { 'x-orchestrator-request': '1', cookie: cookie.split('=')[0] + '=invalid' },
-  })).status, 401);
+  })).status, 401, 'state with invalid cookie');
   const badOrigin = await fetch(`http://127.0.0.1:${port}/orchestrator/api/state`, { headers: { cookie, origin: 'https://evil.example', 'x-orchestrator-request': '1' } });
   assert.equal(badOrigin.status, 403);
   const publicCookie = await publicSignIn();
