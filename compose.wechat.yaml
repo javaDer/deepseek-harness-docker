@@ -7,14 +7,14 @@
 # One image, two containers. The Bridge publishes no host port: DSH reaches it as
 # http://wechat-bridge:8787 on the project network. The Bridge generates a dedicated token on
 # the shared volume on first start; it is never the DSH launch token.
-x-wechat-image: &wechat-image ${DSH_IMAGE_REPOSITORY:-ghcr.io/javader/deepseek-harness}:${WECHAT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent-wechat.2}
+x-wechat-image: &wechat-image ${DSH_IMAGE_REPOSITORY:-ghcr.io/javader/deepseek-harness}:${WECHAT_IMAGE_VERSION:-0.2.2-rc.2-r3-superagent-wechat.1}
 
 services:
   deepseek-harness:
     build:
       dockerfile: Dockerfile.superagent-wechat
       args:
-        SUPERAGENT_IMAGE: docker.io/runzhliu/deepseek-harness:${SUPERAGENT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent.1}
+        SUPERAGENT_IMAGE: docker.io/runzhliu/deepseek-harness:${SUPERAGENT_IMAGE_VERSION:-0.2.2-rc.2-r3-superagent.1}
     image: *wechat-image
     environment:
       WECHAT_BRIDGE_URL: http://wechat-bridge:8787

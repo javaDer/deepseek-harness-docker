@@ -6,6 +6,8 @@ on:
     paths:
       - integrations/wechat/**
       - Dockerfile.superagent-wechat
+      - Dockerfile.superagent
+      - superagent/**
       - .github/workflows/publish-wechat.yml
   workflow_dispatch:
 
@@ -19,7 +21,7 @@ concurrency:
 
 env:
   GHCR_IMAGE: ghcr.io/javader/deepseek-harness
-  TAG: 0.2.2-rc.2-r1-superagent-wechat.2
+  TAG: 0.2.2-rc.2-r3-superagent-wechat.1
 
 jobs:
   platform:
@@ -52,7 +54,11 @@ jobs:
             fi
           done
       - name: Build
-        run: docker build -f Dockerfile.superagent-wechat -t sa .
+        # The WeChat layer must sit on the current Super Agent (r3 auth/same-origin patch), built from this commit.
+        run: |
+          docker build --builder default -f Dockerfile.superagent --build-arg SUPERAGENT_IMAGE_VERSION=0.2.2-rc.2-r3-superagent.1 --build-arg IMAGE_REVISION=${{ github.sha }} -t localhost/superagent .
+          docker build --builder default -f Dockerfile.superagent-wechat --build-arg SUPERAGENT_IMAGE=localhost/superagent -t sa .
+          node scripts/superagent-smoke.cjs sa
       - name: Smoke
         run: |
           docker volume create wb-secrets && docker volume create wb-data

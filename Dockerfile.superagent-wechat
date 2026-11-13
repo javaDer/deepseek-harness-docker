@@ -2,7 +2,7 @@
 # Super Agent image plus the experimental WeChat Source plugin and WeChat Bridge.
 # One image, two containers: compose.wechat.yaml runs the Bridge separately with its own entrypoint,
 # volumes and no access to DSH state or the Docker socket.
-ARG SUPERAGENT_IMAGE=docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r1-superagent.1
+ARG SUPERAGENT_IMAGE=docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r3-superagent.1
 FROM ${SUPERAGENT_IMAGE}
 
 USER root
@@ -16,4 +16,6 @@ USER node
 RUN mkdir -p /opt/dsh-superagent-wechat/node_modules \
     && ln -s /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai /opt/dsh-superagent-wechat/node_modules/@deepseek-ai \
     && DSH_HOME=/opt/deepseek-harness/superagent-template dsh plugin --profile web add --ignore-scripts link:/opt/dsh-superagent-wechat \
+    # pnpm rewrites links as relative paths, which break once the template is copied into DSH_HOME.
+    && for p in dsh-superagent dsh-superagent-wechat; do ln -sfn /opt/$p /opt/deepseek-harness/superagent-template/profiles/web/node_modules/$p; done \
     && rm -rf /opt/deepseek-harness/superagent-template/profiles/web/.plugin-manager/logs
