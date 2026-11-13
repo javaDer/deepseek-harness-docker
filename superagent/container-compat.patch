@@ -22,7 +22,7 @@
    const machine = machineOf(config)
 --- a/src/app/http.ts
 +++ b/src/app/http.ts
-@@ -74,7 +74,19 @@
+@@ -74,7 +74,22 @@
  }
  export function sameOrigin(req: Pick<IncomingMessage, 'headers'>, port: number): boolean {
    const host = req.headers.host
