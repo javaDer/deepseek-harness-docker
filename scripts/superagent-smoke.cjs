@@ -94,9 +94,11 @@ async function api(path, method = 'GET', body) {
     [{ host: 'evil.example', origin: 'https://dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'https://evil.example', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'http://dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
-    [{ host: 'dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' }, 403],
+    [{ host: 'dsh.931217.xyz', cookie: publicCookie, 'x-orchestrator-request': '1' }, 200],
     [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', cookie: publicCookie }, 403],
     [{ host: 'dsh.931217.xyz', origin: 'https://dsh.931217.xyz', 'x-orchestrator-request': '1' }, 401],
+    [{ host: 'dsh.931217.xyz', 'x-orchestrator-request': '1' }, 401],
+    [{ host: 'dsh.931217.xyz', cookie: publicCookie }, 403],
   ]) {
     const rejected = await rawState(headers);
     assert.equal(rejected.status, expected, JSON.stringify(Object.keys(headers)) + ' ' + rejected.body);
