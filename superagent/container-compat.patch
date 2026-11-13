@@ -52,7 +52,7 @@
        if (!sameOrigin(req, ctx.webServer.port)) { json(res, 403, { error: 'Same-origin management request required' }); return }
 +      // Named Web routes do not inherit the SPA's authentication guard.
 +      // Reuse DSH's cookie/authority verifier, and fail closed if unavailable.
-+      const connection = (ctx as Context & { connection?: { requestRejection(request: Pick<IncomingMessage, 'headers'>): 401 | 403 | undefined } }).connection
++      const connection = (runtime as HttpHost & { connection?: { requestRejection(request: Pick<IncomingMessage, 'headers'>): 401 | 403 | undefined } }).connection
 +      if (!connection || typeof connection.requestRejection !== 'function') { json(res, 503, { error: 'DSH authentication unavailable' }); return }
 +      let rejection: 401 | 403 | undefined
 +      try { rejection = connection.requestRejection(req) }
@@ -71,8 +71,8 @@
 +function serve(runtime: Partial<Record<keyof HttpHost, unknown>>, host = '127.0.0.1', authenticated: boolean | null = true) {
    let handler: Handler = async () => {}
 -  const ctx = { webServer: { host, port: 3082, register: (route: { handler: Handler }) => { handler = route.handler; return () => {} } } }
-+  const ctx = { connection: authenticated === null ? undefined : { requestRejection: () => authenticated ? undefined : 401 }, webServer: { host, port: 3082, register: (route: { handler: Handler }) => { handler = route.handler; return () => {} } } }
-   registerHttp(ctx as never, { ready: Promise.resolve(), ...runtime } as unknown as HttpHost)
++  const ctx = { webServer: { host, port: 3082, register: (route: { handler: Handler }) => { handler = route.handler; return () => {} } } }
+   registerHttp(ctx as never, { ready: Promise.resolve(), connection: authenticated === null ? undefined : { requestRejection: () => authenticated ? undefined : 401 }, ...runtime } as unknown as HttpHost)
    return async (method: string, path: string, body?: unknown, headers: Headers = {}) => {
      let status = 0, text = ''
 @@ -96,3 +96,31 @@
