@@ -19,3 +19,6 @@ RUN mkdir -p /opt/dsh-superagent-wechat/node_modules \
     # pnpm rewrites links as relative paths, which break once the template is copied into DSH_HOME.
     && for p in dsh-superagent dsh-superagent-wechat; do ln -sfn /opt/$p /opt/deepseek-harness/superagent-template/profiles/web/node_modules/$p; done \
     && rm -rf /opt/deepseek-harness/superagent-template/profiles/web/.plugin-manager/logs
+# The Super Agent defaults store lists only its own Sources; a missing entry resolves to enabled.
+# Record the WeChat Source as off so a fresh volume never listens until an operator turns it on.
+RUN node -e "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/opt/deepseek-harness/superagent-defaults/orchestrator.sqlite');const rows=db.prepare(\"select key,value from kv where key like 'settings-version:%'\").all();for(const row of rows){const record=JSON.parse(row.value);record.settings.sources.wechat={enabled:false,config:{}};db.prepare('update kv set value = ? where key = ?').run(JSON.stringify(record),row.key)}db.close()"
