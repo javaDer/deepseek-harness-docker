@@ -19,8 +19,7 @@ concurrency:
 
 env:
   GHCR_IMAGE: ghcr.io/javader/deepseek-harness
-  BRIDGE_TAG: 0.2.2-rc.2-r1-wechat-bridge.1
-  SA_TAG: 0.2.2-rc.2-r1-superagent-wechat.1
+  TAG: 0.2.2-rc.2-r1-superagent-wechat.2
 
 jobs:
   platform:
@@ -47,28 +46,24 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Refuse immutable tag overwrite
         run: |
-          for tag in "$BRIDGE_TAG" "$SA_TAG"; do
-            for t in "$tag" "$tag-${{ matrix.arch }}"; do
-              if docker buildx imagetools inspect "$GHCR_IMAGE:$t" >/dev/null 2>&1; then
-                echo "refusing to overwrite $GHCR_IMAGE:$t" >&2; exit 1
-              fi
-            done
+          for t in "$TAG" "$TAG-${{ matrix.arch }}"; do
+            if docker buildx imagetools inspect "$GHCR_IMAGE:$t" >/dev/null 2>&1; then
+              echo "refusing to overwrite $GHCR_IMAGE:$t" >&2; exit 1
+            fi
           done
       - name: Build
-        run: |
-          docker build -f integrations/wechat/Dockerfile -t bridge .
-          docker build -f Dockerfile.superagent-wechat -t sa .
+        run: docker build -f Dockerfile.superagent-wechat -t sa .
       - name: Smoke
         run: |
-          docker run -d --name wb --user node --entrypoint sh bridge -c 'mkdir -p /tmp/s && printf "%048d" 0 > /tmp/s/t && WECHAT_BRIDGE_TOKEN_FILE=/tmp/s/t WECHAT_BRIDGE_DATA=/tmp node /app/src/main.js'
+          docker volume create wb-secrets && docker volume create wb-data
+          docker run -d --name wb --read-only -v wb-secrets:/run/secrets -v wb-data:/data --entrypoint node sa /opt/dsh-wechat-bridge/src/main.js
           sleep 5
           docker exec wb node -e "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1))"
           docker exec wb node -e "fetch('http://127.0.0.1:8787/v1/status').then(r=>process.exit(r.status===401?0:1))"
-          docker run --rm --entrypoint sh sa -c 'DSH_HOME=/opt/deepseek-harness/superagent-template dsh web --dump-config 2>&1 | grep -q "id: dsh-superagent-wechat"'
+          docker run --rm -v wb-secrets:/run/secrets:ro --entrypoint sh sa -c 'test -s /run/secrets/wechat-bridge-token && DSH_HOME=/opt/deepseek-harness/superagent-template dsh web --dump-config 2>&1 | grep -q "id: dsh-superagent-wechat"'
       - name: Push platform images
         run: |
-          docker tag bridge "$GHCR_IMAGE:$BRIDGE_TAG-${{ matrix.arch }}" && docker push "$GHCR_IMAGE:$BRIDGE_TAG-${{ matrix.arch }}"
-          docker tag sa "$GHCR_IMAGE:$SA_TAG-${{ matrix.arch }}" && docker push "$GHCR_IMAGE:$SA_TAG-${{ matrix.arch }}"
+          docker tag sa "$GHCR_IMAGE:$TAG-${{ matrix.arch }}" && docker push "$GHCR_IMAGE:$TAG-${{ matrix.arch }}"
 
   manifest:
     name: Publish multi-platform manifests
@@ -81,7 +76,4 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: |
-          for tag in "$BRIDGE_TAG" "$SA_TAG"; do
-            docker buildx imagetools create --tag "$GHCR_IMAGE:$tag" "$GHCR_IMAGE:$tag-amd64" "$GHCR_IMAGE:$tag-arm64"
-          done
+      - run: docker buildx imagetools create --tag "$GHCR_IMAGE:$TAG" "$GHCR_IMAGE:$TAG-amd64" "$GHCR_IMAGE:$TAG-arm64"

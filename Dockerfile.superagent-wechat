@@ -1,10 +1,16 @@
 # syntax=docker/dockerfile:1.7
-# Super Agent image plus the experimental WeChat Source plugin.
+# Super Agent image plus the experimental WeChat Source plugin and WeChat Bridge.
+# One image, two containers: compose.wechat.yaml runs the Bridge separately with its own entrypoint,
+# volumes and no access to DSH state or the Docker socket.
 ARG SUPERAGENT_IMAGE=docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r1-superagent.1
 FROM ${SUPERAGENT_IMAGE}
 
 USER root
 COPY --chown=node:node integrations/wechat/source /opt/dsh-superagent-wechat
+COPY --chown=node:node integrations/wechat/package.json /opt/dsh-wechat-bridge/package.json
+COPY --chown=node:node integrations/wechat/src /opt/dsh-wechat-bridge/src
+# Mount points owned by node so fresh named volumes inherit writable ownership for the Bridge.
+RUN mkdir -p /data /run/secrets && chown node:node /data /run/secrets
 USER node
 # zod/schemastery peers come from the DSH runtime, same as the bundled Super Agent plugin.
 RUN mkdir -p /opt/dsh-superagent-wechat/node_modules \

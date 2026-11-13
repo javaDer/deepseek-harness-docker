@@ -2,52 +2,34 @@
 # existing files, keeping their volumes and services:
 #
 #   export DOCKER_HOST=tcp://10.16.217.162:2376 DOCKER_TLS_VERIFY=1 DOCKER_CERT_PATH=/Users/zhaofa/.docker
-#   docker compose -p dsh-superagent -f compose.yaml -f compose.superagent.yaml -f compose.wechat.yaml up -d --build
+#   docker compose -p dsh-superagent -f compose.yaml -f compose.superagent.yaml -f compose.wechat.yaml up -d
 #
-# The Bridge publishes no host port: DSH reaches it as http://wechat-bridge:8787 on the
-# project network. Both containers read the same dedicated token, never the DSH launch token.
+# One image, two containers. The Bridge publishes no host port: DSH reaches it as
+# http://wechat-bridge:8787 on the project network. The Bridge generates a dedicated token on
+# the shared volume on first start; it is never the DSH launch token.
+x-wechat-image: &wechat-image ${DSH_IMAGE_REPOSITORY:-ghcr.io/javader/deepseek-harness}:${WECHAT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent-wechat.2}
+
 services:
   deepseek-harness:
     build:
       dockerfile: Dockerfile.superagent-wechat
       args:
-        SUPERAGENT_IMAGE: ${DSH_IMAGE_REPOSITORY:-docker.io/runzhliu/deepseek-harness}:${SUPERAGENT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent.1}
-    image: ${DSH_IMAGE_REPOSITORY:-docker.io/runzhliu/deepseek-harness}:${WECHAT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent-wechat.1}
+        SUPERAGENT_IMAGE: docker.io/runzhliu/deepseek-harness:${SUPERAGENT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent.1}
+    image: *wechat-image
     environment:
       WECHAT_BRIDGE_URL: http://wechat-bridge:8787
       WECHAT_BRIDGE_TOKEN_FILE: /run/secrets/wechat-bridge-token
     volumes:
       - wechat-bridge-secrets:/run/secrets:ro
     depends_on:
-      wechat-bridge-token:
-        condition: service_completed_successfully
       wechat-bridge:
-        condition: service_started
-
-  wechat-bridge-token:
-    image: ${NODE_IMAGE:-docker.io/library/node:24-trixie}
-    user: "0:0"
-    entrypoint:
-      - node
-      - -e
-      - |
-        const fs = require('node:fs')
-        const file = '/secrets/wechat-bridge-token'
-        if (fs.existsSync(file)) process.exit(0)
-        fs.mkdirSync('/secrets', { recursive: true, mode: 0o700 })
-        // 48 random bytes, hex-encoded: a dedicated bridge credential, never reused elsewhere.
-        fs.writeFileSync(file, require('node:crypto').randomBytes(48).toString('hex') + '\n', { mode: 0o600 })
-    volumes:
-      - wechat-bridge-secrets:/secrets
-    restart: "no"
+        condition: service_healthy
 
   wechat-bridge:
-    build:
-      context: .
-      dockerfile: integrations/wechat/Dockerfile
-      args:
-        NODE_IMAGE: ${NODE_IMAGE:-docker.io/library/node:24-trixie}
-    image: ${DSH_IMAGE_REPOSITORY:-docker.io/runzhliu/deepseek-harness}:${WECHAT_BRIDGE_IMAGE_VERSION:-0.2.2-rc.2-r1-wechat-bridge.1}
+    image: *wechat-image
+    entrypoint: ["node", "/opt/dsh-wechat-bridge/src/main.js"]
+    command: []
+    user: node
     environment:
       WECHAT_PROVIDER: ${WECHAT_PROVIDER:-mock}
       WECHAT_ALLOWED_SENDERS: ${WECHAT_ALLOWED_SENDERS:-}
@@ -56,10 +38,14 @@ services:
       WECHAT_BRIDGE_DATA: /data
     volumes:
       - wechat-bridge-data:/data
-      - wechat-bridge-secrets:/run/secrets:ro
-    depends_on:
-      wechat-bridge-token:
-        condition: service_completed_successfully
+      # The Bridge creates the token here on first start; DSH mounts the same volume read-only.
+      - wechat-bridge-secrets:/run/secrets
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
@@ -69,7 +55,7 @@ services:
       - no-new-privileges:true
     pids_limit: 128
     restart: unless-stopped
-    # No published port, no Docker socket, no host mounts: the Bridge cannot touch DSH or the host.
+    # No published port, no Docker socket, no DSH volumes: the Bridge cannot touch DSH state or the host.
 
 volumes:
   wechat-bridge-data:

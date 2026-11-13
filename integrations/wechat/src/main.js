@@ -1,9 +1,15 @@
-import { readFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { Bridge } from './bridge.js'
 import { createProvider } from './providers.js'
 
 const env = process.env
-const token = readFileSync(env.WECHAT_BRIDGE_TOKEN_FILE ?? '/run/secrets/wechat-bridge-token', 'utf8').trim()
+const tokenFile = env.WECHAT_BRIDGE_TOKEN_FILE ?? '/run/secrets/wechat-bridge-token'
+// The Bridge owns its credential: create it once on the shared volume, then DSH reads the same file.
+// 'wx' never overwrites an existing or operator-supplied token.
+try { writeFileSync(tokenFile, randomBytes(48).toString('hex') + '\n', { mode: 0o600, flag: 'wx' }) }
+catch (error) { if (error.code !== 'EEXIST') throw new Error(`cannot create ${tokenFile}: ${error.code}; mount a writable volume there or supply the token file`) }
+const token = readFileSync(tokenFile, 'utf8').trim()
 const provider = createProvider(env)
 const bridge = new Bridge({ provider, token, file: (env.WECHAT_BRIDGE_DATA ?? '/data') + '/bridge.sqlite',
   groups: env.WECHAT_GROUPS_ENABLED === '1',
