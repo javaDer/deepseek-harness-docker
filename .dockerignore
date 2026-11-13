@@ -23,3 +23,14 @@
 
 !plugins/dsh-alertmanager/
 !plugins/dsh-alertmanager/**
+
+!integrations/
+!integrations/wechat/
+!integrations/wechat/package.json
+!integrations/wechat/src/
+!integrations/wechat/src/**
+!integrations/wechat/source/
+!integrations/wechat/source/index.js
+!integrations/wechat/source/protocol.js
+!integrations/wechat/source/package.json
+!integrations/wechat/source/cordis.patch.yml

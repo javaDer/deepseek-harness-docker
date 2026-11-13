@@ -1,0 +1,33 @@
+{
+  "name": "dsh-superagent-wechat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experimental WeChat Source for the DSH Super Agent prototype. Reads a local WeChat Bridge's inbound log and replies through it.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "protocol.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "dsh": "^0.2.2-alpha.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "3.18.5-alpha.1",
+    "zod": "4.4.3"
+  },
+  "scripts": {
+    "test": "node --test ../*.test.js"
+  }
+}

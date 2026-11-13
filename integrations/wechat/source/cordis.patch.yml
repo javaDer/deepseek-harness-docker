@@ -1,0 +1,7 @@
+- insert:
+    - id: dsh-superagent-wechat
+      name: dsh-superagent-wechat
+      config:
+        bridgeUrl: !!js process.env.WECHAT_BRIDGE_URL || 'http://wechat-bridge:8787'
+        tokenFile: !!js process.env.WECHAT_BRIDGE_TOKEN_FILE || '/run/secrets/wechat-bridge-token'
+        pollMs: 2000

@@ -1,0 +1,76 @@
+# WeChat IM integration overlay for the Super Agent project. Use it on top of both
+# existing files, keeping their volumes and services:
+#
+#   export DOCKER_HOST=tcp://10.16.217.162:2376 DOCKER_TLS_VERIFY=1 DOCKER_CERT_PATH=/Users/zhaofa/.docker
+#   docker compose -p dsh-superagent -f compose.yaml -f compose.superagent.yaml -f compose.wechat.yaml up -d --build
+#
+# The Bridge publishes no host port: DSH reaches it as http://wechat-bridge:8787 on the
+# project network. Both containers read the same dedicated token, never the DSH launch token.
+services:
+  deepseek-harness:
+    build:
+      dockerfile: Dockerfile.superagent-wechat
+      args:
+        SUPERAGENT_IMAGE: ${DSH_IMAGE_REPOSITORY:-docker.io/runzhliu/deepseek-harness}:${SUPERAGENT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent.1}
+    image: ${DSH_IMAGE_REPOSITORY:-docker.io/runzhliu/deepseek-harness}:${WECHAT_IMAGE_VERSION:-0.2.2-rc.2-r1-superagent-wechat.1}
+    environment:
+      WECHAT_BRIDGE_URL: http://wechat-bridge:8787
+      WECHAT_BRIDGE_TOKEN_FILE: /run/secrets/wechat-bridge-token
+    volumes:
+      - wechat-bridge-secrets:/run/secrets:ro
+    depends_on:
+      wechat-bridge-token:
+        condition: service_completed_successfully
+      wechat-bridge:
+        condition: service_started
+
+  wechat-bridge-token:
+    image: ${NODE_IMAGE:-docker.io/library/node:24-trixie}
+    user: "0:0"
+    entrypoint:
+      - node
+      - -e
+      - |
+        const fs = require('node:fs')
+        const file = '/secrets/wechat-bridge-token'
+        if (fs.existsSync(file)) process.exit(0)
+        fs.mkdirSync('/secrets', { recursive: true, mode: 0o700 })
+        // 48 random bytes, hex-encoded: a dedicated bridge credential, never reused elsewhere.
+        fs.writeFileSync(file, require('node:crypto').randomBytes(48).toString('hex') + '\n', { mode: 0o600 })
+    volumes:
+      - wechat-bridge-secrets:/secrets
+    restart: "no"
+
+  wechat-bridge:
+    build:
+      context: .
+      dockerfile: integrations/wechat/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-docker.io/library/node:24-trixie}
+    image: ${DSH_IMAGE_REPOSITORY:-docker.io/runzhliu/deepseek-harness}:${WECHAT_BRIDGE_IMAGE_VERSION:-0.2.2-rc.2-r1-wechat-bridge.1}
+    environment:
+      WECHAT_PROVIDER: ${WECHAT_PROVIDER:-mock}
+      WECHAT_ALLOWED_SENDERS: ${WECHAT_ALLOWED_SENDERS:-}
+      WECHAT_GROUPS_ENABLED: ${WECHAT_GROUPS_ENABLED:-0}
+      WECHAT_BRIDGE_TOKEN_FILE: /run/secrets/wechat-bridge-token
+      WECHAT_BRIDGE_DATA: /data
+    volumes:
+      - wechat-bridge-data:/data
+      - wechat-bridge-secrets:/run/secrets:ro
+    depends_on:
+      wechat-bridge-token:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    restart: unless-stopped
+    # No published port, no Docker socket, no host mounts: the Bridge cannot touch DSH or the host.
+
+volumes:
+  wechat-bridge-data:
+  wechat-bridge-secrets:

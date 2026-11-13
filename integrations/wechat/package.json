@@ -1,0 +1,15 @@
+{
+  "name": "@runzhliu/dsh-wechat-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WeChat Bridge for DSH SuperAgent: validates, deduplicates and queues personal WeChat messages. Experimental.",
+  "type": "module",
+  "main": "src/main.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test *.test.js"
+  }
+}

@@ -1,0 +1,13 @@
+# syntax=docker/dockerfile:1.7
+# Super Agent image plus the experimental WeChat Source plugin.
+ARG SUPERAGENT_IMAGE=docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r1-superagent.1
+FROM ${SUPERAGENT_IMAGE}
+
+USER root
+COPY --chown=node:node integrations/wechat/source /opt/dsh-superagent-wechat
+USER node
+# zod/schemastery peers come from the DSH runtime, same as the bundled Super Agent plugin.
+RUN mkdir -p /opt/dsh-superagent-wechat/node_modules \
+    && ln -s /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai /opt/dsh-superagent-wechat/node_modules/@deepseek-ai \
+    && DSH_HOME=/opt/deepseek-harness/superagent-template dsh plugin --profile web add --ignore-scripts link:/opt/dsh-superagent-wechat \
+    && rm -rf /opt/deepseek-harness/superagent-template/profiles/web/.plugin-manager/logs
