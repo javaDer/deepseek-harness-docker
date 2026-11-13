@@ -24,7 +24,7 @@
   "superagentCapture": {
     "capturedAt": "2026-11-12T02:53:18.017Z",
     "runtimeVersion": "0.2.2-rc.2",
-    "imageReference": "ghcr.io/runzhliu/deepseek-harness:0.2.2-rc.2-r2-superagent.1",
+    "imageReference": "ghcr.io/runzhliu/deepseek-harness:0.2.2-rc.2-r3-superagent.1",
     "theme": "light",
     "temporaryStateOnly": true,
     "modelConfigured": false,

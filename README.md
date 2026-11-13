@@ -308,7 +308,7 @@ dsh plugin --profile web add /tmp/runzhliu-dsh-browser-desktop-0.1.6.tgz
 
 ### 可选的 Super Agent 预装镜像
 
-镜像 `runzhliu/deepseek-harness:0.2.2-rc.2-r2-superagent.1` 在插件市场版基础上预装 [DeepSeek Super Agent 原型](https://github.com/deepseek-ai/dsh-superagent-prototype) `0.1.0`，固定源码提交 [`6337fc8`](https://github.com/deepseek-ai/dsh-superagent-prototype/commit/6337fc823ce20251c8de8085948165c81aaa701e)。包含 GitHub CLI `2.103.3`、tmux 和 Git LFS；同名双架构镜像同时提供于 Docker Hub / GHCR。
+镜像 `runzhliu/deepseek-harness:0.2.2-rc.2-r3-superagent.1` 在插件市场版基础上预装 [DeepSeek Super Agent 原型](https://github.com/deepseek-ai/dsh-superagent-prototype) `0.1.0`，固定源码提交 [`6337fc8`](https://github.com/deepseek-ai/dsh-superagent-prototype/commit/6337fc823ce20251c8de8085948165c81aaa701e)。包含 GitHub CLI `2.103.3`、tmux 和 Git LFS；同名双架构镜像同时提供于 Docker Hub / GHCR。
 
 上游将它定位为研究原型，并非正式 DeepSeek 产品。这个变体提供预安装环境：**首次启动暂停处理、关闭来源和自动评估，未连接仓库或模型**，需要你在 Superagent 面板完成配置。公开镜像使用上游代码及可审查的[容器兼容补丁](superagent/container-compat.patch)，不包含本机的公司 GitLab 适配、内部模型、会话或凭据。
 

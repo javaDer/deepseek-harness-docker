@@ -13,7 +13,7 @@ ungoogled_amd64_sha256="${9:?missing ungoogled-chromium amd64 sha256}"
 ungoogled_arm64_sha256="${10:?missing ungoogled-chromium arm64 sha256}"
 bwrap_image_version="${11:?missing bubblewrap image version}"
 caddy_version="${12:?missing Caddy version}"
-superagent_image_version="${image_version%-r1}-r2-superagent.1"
+superagent_image_version="${image_version%-r1}-r3-superagent.1"
 
 require_literal() {
   local file="$1"

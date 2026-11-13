@@ -309,7 +309,7 @@ Plugin `0.1.6` adds compatibility with the DSH `0.2.2` client-module runtime whi
 
 ### Optional preinstalled Super Agent image
 
-`runzhliu/deepseek-harness:0.2.2-rc.2-r2-superagent.1` extends the market image with the [DeepSeek Super Agent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) `0.1.0`, pinned to commit [`6337fc8`](https://github.com/deepseek-ai/dsh-superagent-prototype/commit/6337fc823ce20251c8de8085948165c81aaa701e). It includes GitHub CLI `2.103.3`, tmux and Git LFS, with matching amd64/arm64 images on Docker Hub and GHCR.
+`runzhliu/deepseek-harness:0.2.2-rc.2-r3-superagent.1` extends the market image with the [DeepSeek Super Agent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) `0.1.0`, pinned to commit [`6337fc8`](https://github.com/deepseek-ai/dsh-superagent-prototype/commit/6337fc823ce20251c8de8085948165c81aaa701e). It includes GitHub CLI `2.103.3`, tmux and Git LFS, with matching amd64/arm64 images on Docker Hub and GHCR.
 
 Upstream describes it as a research prototype, not an official DeepSeek product. This variant preinstalls the environment: **processing, Sources and automatic evaluation are off on first startup, with no repository or model connected**. Complete setup in the Superagent panel. It contains upstream code plus a reviewable [container compatibility patch](superagent/container-compat.patch); the local company GitLab adapter, internal models, Sessions and credentials are excluded.
 
