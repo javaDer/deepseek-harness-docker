@@ -13,7 +13,7 @@
 +++ b/src/index.ts
 @@ -5,7 +5,7 @@
  import { Config, machineOf, type DeploymentConfig } from './deployment.ts'
-
+ 
  export const name = 'dsh-superagent'
 -export const inject = ['agents', 'sessionController', 'sessionPersistence', 'workspaceRegistry', 'permissionPresets', 'tools', 'systemPrompt', 'skills', 'webServer', 'llm', 'subprocess']
 +export const inject = ['agents', 'sessionController', 'sessionPersistence', 'workspaceRegistry', 'permissionPresets', 'tools', 'systemPrompt', 'skills', 'webServer', 'connection', 'llm', 'subprocess']
@@ -22,11 +22,12 @@
    const machine = machineOf(config)
 --- a/src/app/http.ts
 +++ b/src/app/http.ts
-@@ -74,7 +74,21 @@
+@@ -74,8 +74,22 @@
  }
  export function sameOrigin(req: Pick<IncomingMessage, 'headers'>, port: number): boolean {
    const host = req.headers.host
 -  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false
+-  return req.headers['x-orchestrator-request'] === '1' && (req.headers.origin === undefined || req.headers.origin === `http://${host}`)
 +  const marker = req.headers['x-orchestrator-request'] === '1'
 +  if (!marker || typeof host !== 'string') return false
 +  // Container publishing may use a different, explicitly configured loopback port.
@@ -43,10 +44,10 @@
 +  // Browser same-origin GET requests may omit Origin; Host plus the signed
 +  // DSH session and request marker still protect this management route.
 +  return host === trusted.host && (req.headers.origin === undefined || req.headers.origin === configured)
--  return req.headers['x-orchestrator-request'] === '1' && (req.headers.origin === undefined || req.headers.origin === `http://${host}`)
  }
  /** Maps errors to HTTP status codes and structured payloads that the panel localizes in the interface language. */
-@@ -235,6 +249,15 @@
+ function failure(error: unknown): [number, Record<string, unknown>] {
+@@ -235,6 +249,14 @@
        const url = new URL(req.url ?? '/', 'http://localhost')
        if (!url.pathname.startsWith('/orchestrator/api/')) { res.writeHead(404); res.end(); return }
        if (!sameOrigin(req, ctx.webServer.port)) { json(res, 403, { error: 'Same-origin management request required' }); return }
@@ -54,7 +55,6 @@
 +      // Reuse DSH's cookie/authority verifier, and fail closed if unavailable.
 +      const connection = (ctx as Context & { connection?: { requestRejection(request: Pick<IncomingMessage, 'headers'>): 401 | 403 | undefined } }).connection
 +      if (!connection || typeof connection.requestRejection !== 'function') { json(res, 503, { error: 'DSH authentication unavailable' }); return }
-+      if (typeof req.headers.cookie !== 'string' || req.headers.cookie.length === 0) { json(res, 401, { error: 'DSH authentication required' }); return }
 +      let rejection: 401 | 403 | undefined
 +      try { rejection = connection.requestRejection(req) }
 +      catch { rejection = 401 }
@@ -64,7 +64,19 @@
          const route = match(table, req.method ?? 'GET', url.pathname.slice('/orchestrator/api/'.length).split('/'))
 --- a/tests/http.spec.ts
 +++ b/tests/http.spec.ts
-@@ -96,3 +96,24 @@
+@@ -10,9 +10,9 @@
+ type Handler = (req: unknown, res: unknown) => Promise<void>
+ type Headers = Record<string, string | undefined>
+ /** Mount management HTTP routes on a fake web server and return a request helper that includes default panel headers. */
+-function serve(runtime: Partial<Record<keyof HttpHost, unknown>>, host = '127.0.0.1') {
++function serve(runtime: Partial<Record<keyof HttpHost, unknown>>, host = '127.0.0.1', requestRejection: () => 401 | 403 | undefined = () => undefined) {
+   let handler: Handler = async () => {}
+-  const ctx = { webServer: { host, port: 3082, register: (route: { handler: Handler }) => { handler = route.handler; return () => {} } } }
++  const ctx = { connection: { requestRejection }, webServer: { host, port: 3082, register: (route: { handler: Handler }) => { handler = route.handler; return () => {} } } }
+   registerHttp(ctx as never, { ready: Promise.resolve(), ...runtime } as unknown as HttpHost)
+   return async (method: string, path: string, body?: unknown, headers: Headers = {}) => {
+     let status = 0, text = ''
+@@ -96,3 +96,31 @@
      body: { error: `Request exceeds ${128 * 1024} bytes` } })
    expect(saves).toEqual([])
  })
@@ -89,6 +101,13 @@
 +})
 +
 +
++
++it('requires the DSH session and fails closed when it cannot be verified', async () => {
++  const runtime = { sessions: { delivery: async () => 'injected' }, engine: { unsubscribe: () => true } }
++  expect((await serve(runtime, '127.0.0.1', () => 401)('GET', 'state')).status).toBe(401)
++  expect((await serve(runtime, '127.0.0.1', () => 403)('GET', 'state')).status).toBe(403)
++  expect((await serve(runtime, '127.0.0.1', () => { throw Error('bad cookie') })('GET', 'state')).status).toBe(401)
++})
 --- a/tests/sources.spec.ts
 +++ b/tests/sources.spec.ts
 @@ -1089,12 +1089,15 @@
