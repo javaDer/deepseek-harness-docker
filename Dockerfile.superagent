@@ -15,6 +15,9 @@ RUN curl --fail --location --retry 3 --output /tmp/superagent.tar.gz \
     && pnpm install --frozen-lockfile --ignore-scripts
 COPY superagent/container-compat.patch /tmp/container-compat.patch
 RUN patch --no-backup-if-mismatch --fuzz=3 -p1 < /tmp/container-compat.patch \
+    && grep -q 'connection.requestRejection(req)' src/app/http.ts \
+    && grep -q 'DSH_SUPERAGENT_TRUSTED_ORIGIN' src/app/http.ts \
+    && ! find . -name '*.rej' -not -path './node_modules/*' | grep -q . \
     && pnpm exec tsc --noEmit \
     && pnpm exec vitest run --maxWorkers=2 \
     && pnpm run build \
