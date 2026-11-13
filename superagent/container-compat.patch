@@ -54,6 +54,7 @@
 +      // Reuse DSH's cookie/authority verifier, and fail closed if unavailable.
 +      const connection = (ctx as Context & { connection?: { requestRejection(request: Pick<IncomingMessage, 'headers'>): 401 | 403 | undefined } }).connection
 +      if (!connection || typeof connection.requestRejection !== 'function') { json(res, 503, { error: 'DSH authentication unavailable' }); return }
++      if (typeof req.headers.cookie !== 'string' || req.headers.cookie.length === 0) { json(res, 401, { error: 'DSH authentication required' }); return }
 +      let rejection: 401 | 403 | undefined
 +      try { rejection = connection.requestRejection(req) }
 +      catch { rejection = 401 }
