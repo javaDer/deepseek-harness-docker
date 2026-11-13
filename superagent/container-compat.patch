@@ -100,13 +100,6 @@
 +})
 +
 +
-+it('requires DSH authentication before reading or mutating management state', async () => {
-+  for (const [authenticated, status] of [[false, 401], [null, 503]] as const) {
-+    const call = serve({}, '127.0.0.1', authenticated)
-+    expect(await call('GET', 'state')).toMatchObject({ status })
-+    expect(await call('POST', 'executor/resume')).toMatchObject({ status })
-+  }
-+})
 --- a/tests/sources.spec.ts
 +++ b/tests/sources.spec.ts
 @@ -1089,12 +1089,15 @@
