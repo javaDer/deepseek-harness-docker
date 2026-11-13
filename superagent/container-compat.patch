@@ -52,7 +52,7 @@
        if (!sameOrigin(req, ctx.webServer.port)) { json(res, 403, { error: 'Same-origin management request required' }); return }
 +      // Named Web routes do not inherit the SPA's authentication guard.
 +      // Reuse DSH's cookie/authority verifier, and fail closed if unavailable.
-+      const connection = (runtime as HttpHost & { connection?: { requestRejection(request: Pick<IncomingMessage, 'headers'>): 401 | 403 | undefined } }).connection
++      const connection = (ctx as Context & { connection?: { requestRejection(request: Pick<IncomingMessage, 'headers'>): 401 | 403 | undefined } }).connection
 +      if (!connection || typeof connection.requestRejection !== 'function') { json(res, 503, { error: 'DSH authentication unavailable' }); return }
 +      let rejection: 401 | 403 | undefined
 +      try { rejection = connection.requestRejection(req) }
