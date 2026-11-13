@@ -13,6 +13,7 @@ ungoogled_amd64_sha256="${9:?missing ungoogled-chromium amd64 sha256}"
 ungoogled_arm64_sha256="${10:?missing ungoogled-chromium arm64 sha256}"
 bwrap_image_version="${11:?missing bubblewrap image version}"
 caddy_version="${12:?missing Caddy version}"
+superagent_image_version="${image_version%-r1}-r2-superagent.1"
 
 require_literal() {
   local file="$1"
@@ -41,12 +42,12 @@ require_literal Dockerfile.market "ARG BASE_IMAGE=docker.io/runzhliu/deepseek-ha
 require_literal Dockerfile.market "ARG DSH_MARKET_VERSION=${market_version}"
 require_literal Dockerfile.market "ARG MARKET_IMAGE_VERSION=${market_image_version}"
 require_literal Dockerfile.superagent "ARG BASE_IMAGE=docker.io/runzhliu/deepseek-harness:${market_image_version}"
-require_literal Dockerfile.superagent "ARG SUPERAGENT_IMAGE_VERSION=${image_version}-superagent.1"
-require_literal compose.superagent.yaml "SUPERAGENT_IMAGE_VERSION:-${image_version}-superagent.1"
-require_literal .github/workflows/publish-superagent.yml "SUPERAGENT_IMAGE_VERSION: ${image_version}-superagent.1"
+require_literal Dockerfile.superagent "ARG SUPERAGENT_IMAGE_VERSION=${superagent_image_version}"
+require_literal compose.superagent.yaml "SUPERAGENT_IMAGE_VERSION:-${superagent_image_version}"
+require_literal .github/workflows/publish-superagent.yml "SUPERAGENT_IMAGE_VERSION: ${superagent_image_version}"
 require_literal .github/workflows/ci.yml './scripts/smoke.sh deepseek-harness:ci-superagent-'
-require_literal README.md "${image_version}-superagent.1"
-require_literal README.en.md "${image_version}-superagent.1"
+require_literal README.md "${superagent_image_version}"
+require_literal README.en.md "${superagent_image_version}"
 require_literal Dockerfile.bwrap "ARG BASE_IMAGE=docker.io/runzhliu/deepseek-harness:${image_version}"
 require_literal Dockerfile.bwrap "ARG BWRAP_IMAGE_VERSION=${bwrap_image_version}"
 require_literal Dockerfile.bwrap 'apt-get install --yes --no-install-recommends bubblewrap'
