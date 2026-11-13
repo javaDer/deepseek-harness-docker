@@ -40,7 +40,9 @@
 +  if (!configured || !/^https:\/\/[^*\s/]+$/.test(configured)) return false
 +  let trusted: URL
 +  try { trusted = new URL(configured); if (trusted.pathname !== '/' || trusted.search || trusted.hash || trusted.username || trusted.password) return false } catch { return false }
-+  return host === trusted.host && req.headers.origin === configured
++  // Browser same-origin GET requests may omit Origin; Host plus the signed
+  // DSH session and request marker still protect this management route.
+  return host === trusted.host && (req.headers.origin === undefined || req.headers.origin === configured)
 -  return req.headers['x-orchestrator-request'] === '1' && (req.headers.origin === undefined || req.headers.origin === `http://${host}`)
  }
  /** Maps errors to HTTP status codes and structured payloads that the panel localizes in the interface language. */
