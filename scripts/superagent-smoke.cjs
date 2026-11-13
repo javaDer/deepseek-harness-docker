@@ -4,7 +4,7 @@ const cp = require('node:child_process');
 const net = require('node:net');
 const crypto = require('node:crypto');
 const http = require('node:http');
-const image = process.argv[2] || 'docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r1-superagent.1';
+const image = process.argv[2] || 'docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r2-superagent.1';
 const suffix = `${process.pid}-${crypto.randomBytes(3).toString('hex')}`;
 const container = 'dsh-superagent-smoke-' + suffix;
 const volume = container + '-home', existing = container + '-existing';
