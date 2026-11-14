@@ -8,26 +8,28 @@
 import schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 import { readFileSync } from 'node:fs'
-import { SOURCE, key, pollOnce } from './protocol.js'
+import { SOURCE, key, pollOnce, authzSnapshot } from './protocol.js'
 
-export { SOURCE, CURSOR, triggerId, wechatTrigger, describeTicket, command, pollOnce } from './protocol.js'
+export { SOURCE, CURSOR, triggerId, wechatTrigger, describeTicket, command, pollOnce, authzSnapshot, authzRevision } from './protocol.js'
 
 export const name = 'dsh-superagent-wechat'
 export const inject = ['orchestrator']
 const ID = /^[A-Za-z0-9_@.:-]{1,128}$/
+/** Re-push an unchanged snapshot this often; the Bridge's default freshness window is five minutes. */
+const AUTHZ_HEARTBEAT_MS = 30000
 export const Config = schema.object({
   bridgeUrl: schema.string().default('http://wechat-bridge:8787'),
   tokenFile: schema.string().default('/run/secrets/wechat-bridge-token'),
   pollMs: schema.number().step(1).min(500).max(60000).default(2000),
 })
 /** `directMessages`/`groups` mirror the Bridge's own filters; both must allow a chat for it to be read. */
-export const ConfigSchema = z.object({ directMessages: z.boolean().default(true), groups: z.boolean().default(false) }).strict()
+export const ConfigSchema = z.object({ directMessages: z.boolean().default(true), groups: z.boolean().default(false), confirmed: z.boolean().default(false) }).strict()
 
 export class BridgeClient {
   constructor({ bridgeUrl, tokenFile }, request = fetch) { this.url = bridgeUrl.replace(/\/$/, ''); this.tokenFile = tokenFile; this.request = request }
-  async call(path, body) {
+  async call(path, body, method = body ? 'POST' : 'GET') {
     const token = readFileSync(this.tokenFile, 'utf8').trim()
-    const response = await this.request(this.url + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(10000),
+    const response = await this.request(this.url + path, { method, redirect: 'error', signal: AbortSignal.timeout(10000),
       headers: { authorization: 'Bearer ' + token, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
     if (!response.ok) { const error = new Error('bridge http ' + response.status); error.status = response.status; throw error }
     return response.json()
@@ -40,6 +42,9 @@ export function wechatKind(client) {
     description: { zh: '经 WeChat Bridge 接收私聊消息；群聊默认关闭。', en: 'Receives direct messages through the WeChat Bridge; groups are off by default.' },
     schema: ConfigSchema,
     fields: [
+      { key: 'confirmed', type: 'switch', label: { zh: '确认启用', en: 'Confirmed' },
+        hint: { zh: '核对下方允许的联系人后再打开。未确认时 Bridge 拒收所有新消息。扫码登录和名单都不授予 Git Push、MR、DDL、Nacos 等高风险操作。',
+          en: 'Turn on after reviewing the allowed contacts. Until then the Bridge refuses all new messages. Neither QR login nor the list grants Git push, MRs, DDL or Nacos changes.' } },
       { key: 'directMessages', type: 'switch', label: { zh: '接收私聊', en: 'Direct messages' } },
       { key: 'groups', type: 'switch', label: { zh: '接收群聊 @', en: 'Group @mentions' },
         hint: { zh: '默认关闭。群内只接收 @ 机器人的消息。', en: 'Off by default. Only messages that mention the bot are read in groups.' } },
@@ -103,11 +108,24 @@ export function apply(ctx, config) {
 }
 
 async function loop(source, client, registry, config, signal) {
-  let failures = 0
+  let failures = 0, pushed, pushedAt = 0
   await source.ready
   while (!signal.aborted) {
-    try { await pollOnce(source, client, registry); failures = 0 }
-    catch (error) {
+    // Keep the Bridge's snapshot current: on every change, and as a heartbeat well inside its freshness window.
+    let authzError
+    const snapshot = authzSnapshot(source, registry)
+    if (snapshot.revision !== pushed || Date.now() - pushedAt > AUTHZ_HEARTBEAT_MS) {
+      try {
+        const ack = await client.call('/v1/authz', snapshot, 'PUT')
+        if (ack.revision !== snapshot.revision) throw new Error('Bridge stored another revision')
+        pushed = snapshot.revision; pushedAt = Date.now()
+      } catch (error) { pushed = undefined; authzError = error }
+    }
+    try {
+      await pollOnce(source, client, registry); failures = 0
+      // The Bridge refuses new messages while its snapshot is missing or stale, so a failed push is an error, not a pause.
+      if (authzError) source.report('wechat', { state: 'error', detail: `Allowlist sync failed: ${String(authzError.message).slice(0, 120)}` })
+    } catch (error) {
       failures++
       source.report('wechat', { state: 'error', detail: `${failures} consecutive failed polls; last: ${String(error.message).slice(0, 120)}` })
     }

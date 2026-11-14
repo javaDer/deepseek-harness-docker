@@ -16,6 +16,7 @@ export class BridgeStore {
       CREATE TABLE IF NOT EXISTS outbound(id TEXT PRIMARY KEY, chat_id TEXT NOT NULL, text TEXT NOT NULL, state TEXT NOT NULL,
         attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL, error TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS outbound_pending ON outbound(state, next_at);`)
     // A send interrupted by a crash may or may not have reached WeChat; never resend it automatically.
     this.db.prepare("UPDATE outbound SET state='unknown', error='interrupted', updated_at=? WHERE state='sending'").run(this.now())
@@ -58,5 +59,8 @@ export class BridgeStore {
     else this.db.prepare('UPDATE outbound SET state=?, error=?, updated_at=? WHERE id=?').run(outcome === 'retry' ? 'failed' : outcome, error ?? null, at, id)
   }
   counts() { return Object.fromEntries(this.db.prepare('SELECT state, count(*) AS n FROM outbound GROUP BY state').all().map(r => [r.state, Number(r.n)])) }
+  /** The last authorization snapshot DSH pushed, with the time it was received; survives restarts. */
+  authz() { const r = this.db.prepare("SELECT value FROM kv WHERE key='authz'").get(); return r ? JSON.parse(r.value) : undefined }
+  saveAuthz(snapshot) { this.db.prepare("INSERT INTO kv(key,value) VALUES('authz',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(snapshot)) }
   close() { this.db.close() }
 }

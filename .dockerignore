@@ -32,5 +32,8 @@
 !integrations/wechat/source/
 !integrations/wechat/source/index.js
 !integrations/wechat/source/protocol.js
+!integrations/wechat/source/setup.js
+!integrations/wechat/source/setup-route.js
+!integrations/wechat/source/client.js
 !integrations/wechat/source/package.json
 !integrations/wechat/source/cordis.patch.yml

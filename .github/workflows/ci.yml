@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - weixin
 
 permissions:
   contents: read

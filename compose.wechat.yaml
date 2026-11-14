@@ -7,7 +7,7 @@
 # One image, two containers. The Bridge publishes no host port: DSH reaches it as
 # http://wechat-bridge:8787 on the project network. The Bridge generates a dedicated token on
 # the shared volume on first start; it is never the DSH launch token.
-x-wechat-image: &wechat-image ${DSH_IMAGE_REPOSITORY:-ghcr.io/javader/deepseek-harness}:${WECHAT_IMAGE_VERSION:-0.2.2-rc.2-r3-superagent-wechat.2}
+x-wechat-image: &wechat-image ${DSH_IMAGE_REPOSITORY:-ghcr.io/javader/deepseek-harness}:${WECHAT_IMAGE_VERSION:-0.2.2-rc.2-r3-superagent-wechat.3}
 
 services:
   deepseek-harness:
@@ -32,6 +32,7 @@ services:
     user: node
     environment:
       WECHAT_PROVIDER: ${WECHAT_PROVIDER:-mock}
+      # Deprecated. The DSH Source Policy is the allowlist; this can only narrow it. Leave empty after migrating.
       WECHAT_ALLOWED_SENDERS: ${WECHAT_ALLOWED_SENDERS:-}
       WECHAT_GROUPS_ENABLED: ${WECHAT_GROUPS_ENABLED:-0}
       WECHAT_BRIDGE_TOKEN_FILE: /run/secrets/wechat-bridge-token

@@ -5,3 +5,9 @@
         bridgeUrl: !!js process.env.WECHAT_BRIDGE_URL || 'http://wechat-bridge:8787'
         tokenFile: !!js process.env.WECHAT_BRIDGE_TOKEN_FILE || '/run/secrets/wechat-bridge-token'
         pollMs: 2000
+    # The setup wizard's routes; separate so they stay up when the Superagent runtime does not.
+    - id: dsh-superagent-wechat-setup
+      name: dsh-superagent-wechat/setup
+      config:
+        bridgeUrl: !!js process.env.WECHAT_BRIDGE_URL || 'http://wechat-bridge:8787'
+        adminTokenFile: !!js process.env.WECHAT_BRIDGE_ADMIN_TOKEN_FILE || '/run/secrets/wechat-bridge-admin-token'

@@ -59,9 +59,12 @@ export class IlinkProvider {
   constructor({ stateFile, baseUrl, request, trust, pauseMs = 3600000, idleMs = 5000, retryMs = 1000 } = {}) {
     this.state = new IlinkState(stateFile); this.baseUrl = baseUrl; this.request = request; this.trust = trust
     this.pauseMs = pauseMs; this.idleMs = idleMs; this.retryMs = retryMs
-    this.connected = false; this.detail = 'not started'; this.stopped = true; this.client = undefined; this.abort = undefined; this.wake = undefined
+    this.connected = false; this.detail = 'not started'; this.stopped = true; this.client = undefined; this.abort = undefined; this.wakeup = undefined
   }
-  sleep(ms) { return new Promise(resolve => { const timer = setTimeout(resolve, ms); this.wake = () => { clearTimeout(timer); resolve() } }) }
+  sleep(ms) { return new Promise(resolve => { const timer = setTimeout(resolve, ms); this.wakeup = () => { clearTimeout(timer); resolve() } }) }
+  /** Ends a backoff or session pause early, e.g. right after an operator logged in again. */
+  nudge() { this.wakeup?.() }
+  loggedIn() { return !!(this.state.data.token ?? this.state.load().token) }
   async start(onMessage) { this.onMessage = onMessage; this.stopped = false; this.abort = new AbortController(); this.loop = this.run() }
   async run() {
     let delay = this.retryMs, pollMs = 35000
@@ -78,8 +81,8 @@ export class IlinkProvider {
         if (code === -14) { this.connected = false; this.detail = 'session expired (-14); paused'; await this.sleep(this.pauseMs); continue }
         if (code) throw Object.assign(new Error('iLink ret ' + code), { code })
         for (const message of response.msgs ?? []) await this.deliver(message)
-        // The cursor moves only after every message of the batch reached the Bridge store.
-        if (response.get_updates_buf) { this.state.data.buf = response.get_updates_buf; this.state.save() }
+        // The cursor moves only after every message of the batch reached the Bridge store, and never across a re-login.
+        if (response.get_updates_buf && this.state.data.token === token) { this.state.data.buf = response.get_updates_buf; this.state.save() }
         if (response.longpolling_timeout_ms > 0) pollMs = response.longpolling_timeout_ms
         this.connected = true; this.detail = 'logged in'; delay = this.retryMs
       } catch (error) {
@@ -115,45 +118,57 @@ export class IlinkProvider {
   }
   status() { return { connected: this.connected, detail: this.detail } }
   async stop() {
-    this.stopped = true; this.abort?.abort(); this.wake?.()
+    this.stopped = true; this.abort?.abort(); this.wakeup?.()
     await this.loop?.catch(() => {})
     await this.client?.notify('stop').catch(() => {})
   }
 }
 
+/** Resolves after `ms`, or rejects with the signal's reason once it aborts. */
+const pause = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) return reject(signal.reason)
+  const done = () => { signal?.removeEventListener('abort', stop); resolve() }
+  const timer = setTimeout(done, ms)
+  const stop = () => { clearTimeout(timer); reject(signal.reason) }
+  signal?.addEventListener('abort', stop, { once: true })
+})
+
 /**
  * Operator-driven QR login. Nothing here runs automatically: a person scans with their own WeChat.
  * onQr(url) shows the link to encode as a QR code, readPin() returns the digits WeChat shows when asked.
+ * Failures return a stable `code` (qr_expired, already_bound, no_credentials, timeout); aborting `signal` rejects.
  */
-export async function loginWithQr({ client, state, onQr, readPin, onStatus = () => {}, timeoutMs = 480000, pollMs = 35000, refreshLimit = 3 }) {
+export async function loginWithQr({ client, state, onQr, readPin, onStatus = () => {}, signal, timeoutMs = 480000, pollMs = 35000, refreshLimit = 3 }) {
   const fetchQr = async () => {
-    const qr = await client.call('POST', 'ilink/bot/get_bot_qrcode?bot_type=3', { body: { local_token_list: [] }, auth: false })
+    const qr = await client.call('POST', 'ilink/bot/get_bot_qrcode?bot_type=3', { body: { local_token_list: [] }, auth: false, signal })
     onQr(qr.qrcode_img_content); return qr.qrcode
   }
   let qrcode = await fetchQr(), refreshes = 1, pin
   for (const deadline = Date.now() + timeoutMs; Date.now() < deadline;) {
+    signal?.throwIfAborted()
     let reply
     try {
-      reply = await client.call('GET', `ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrcode)}${pin ? '&verify_code=' + encodeURIComponent(pin) : ''}`, { auth: false, timeoutMs: pollMs + 5000 })
+      reply = await client.call('GET', `ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrcode)}${pin ? '&verify_code=' + encodeURIComponent(pin) : ''}`, { auth: false, signal, timeoutMs: pollMs + 5000 })
     } catch { reply = { status: 'wait' } } // gateway timeouts and client timeouts just mean "keep waiting"
+    signal?.throwIfAborted()
     onStatus(reply.status)
     switch (reply.status) {
       case 'scaned': pin = undefined; break
       case 'need_verifycode': pin = await readPin(); continue
       case 'scaned_but_redirect': if (reply.redirect_host) client.rebase('https://' + reply.redirect_host); break
-      case 'binded_redirect': return { ok: false, reason: 'already bound; existing credentials stay valid' }
+      case 'binded_redirect': return { ok: false, code: 'already_bound', reason: 'already bound; existing credentials stay valid' }
       case 'expired': case 'verify_code_blocked':
         pin = undefined
-        if (++refreshes > refreshLimit) return { ok: false, reason: 'QR code expired too many times' }
+        if (++refreshes > refreshLimit) return { ok: false, code: 'qr_expired', reason: 'QR code expired too many times' }
         qrcode = await fetchQr(); break
       case 'confirmed': {
-        if (!reply.bot_token || !reply.ilink_bot_id) return { ok: false, reason: 'server did not return credentials' }
+        if (!reply.bot_token || !reply.ilink_bot_id) return { ok: false, code: 'no_credentials', reason: 'server did not return credentials' }
         state.data = { token: reply.bot_token, botId: reply.ilink_bot_id, baseUrl: reply.baseurl || client.base, userId: reply.ilink_user_id, buf: '', ctx: {} }
         client.trust(state.data.baseUrl); state.save()
         return { ok: true, userId: reply.ilink_user_id }
       }
     }
-    await new Promise(resolve => setTimeout(resolve, Math.min(1000, pollMs)))
+    await pause(Math.min(1000, pollMs), signal)
   }
-  return { ok: false, reason: 'login timed out' }
+  return { ok: false, code: 'timeout', reason: 'login timed out' }
 }

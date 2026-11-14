@@ -139,6 +139,7 @@ lan-logs:
 
 compose-check:
 	docker compose -p dsh-superagent -f compose.yaml -f compose.superagent.yaml config --quiet
+	docker compose -p dsh-superagent -f compose.yaml -f compose.superagent.yaml -f compose.wechat.yaml config --quiet
 	docker compose config --quiet
 	docker compose -f compose.yaml -f compose.market.yaml config --quiet
 	docker compose -f compose.yaml -f compose.bwrap.yaml config --quiet
@@ -173,6 +174,9 @@ plugin-check:
 	bash -n scripts/podman-smoke.sh
 	bash -n scripts/smoke.sh
 	npm --cache "$${TMPDIR:-/tmp}/dsh-browser-plugin-npm-cache" pack --dry-run --json ./plugins/dsh-browser-desktop >/dev/null
+	node --test integrations/wechat/*.test.js
+	@for file in integrations/wechat/src/*.js integrations/wechat/source/*.js; do node --check "$$file"; done
+	npm --cache "$${TMPDIR:-/tmp}/dsh-browser-plugin-npm-cache" pack --dry-run --json ./integrations/wechat/source >/dev/null
 
 dockerhub-check:
 	bash -n scripts/render-dockerhub-readme.sh

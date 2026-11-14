@@ -11,13 +11,18 @@ import { join } from 'node:path'
 import { Bridge, normalize, MAX_TEXT } from './src/bridge.js'
 import { BridgeStore, MAX_ATTEMPTS } from './src/store.js'
 import { MockProvider } from './src/providers.js'
-import { key, wechatTrigger, command, pollOnce, triggerId } from './source/protocol.js'
+import { key, wechatTrigger, command, pollOnce, triggerId, authzRevision } from './source/protocol.js'
 
 const TOKEN = 'x'.repeat(40)
 const msg = (id, over = {}) => ({ id, chatId: 'room1', chatType: 'direct', senderId: 'wxid_a', self: false, mentioned: false,
   text: 'hello', at: '2026-11-13T00:00:00.000Z', ...over })
 const dir = () => { const path = mkdtempSync(join(tmpdir(), 'wechat-')); return { path, file: join(path, 'bridge.sqlite'), done: () => rmSync(path, { recursive: true, force: true }) } }
-const open = (file, provider = new MockProvider(), over = {}) => new Bridge({ provider, file, token: TOKEN, ...over })
+// The Bridge refuses everything until DSH pushes an authorization snapshot; fixtures seed one for the senders they use.
+const open = (file, provider = new MockProvider(), { authz = ['wxid_a', 'wxid_b'], ...over } = {}) => {
+  const bridge = new Bridge({ provider, file, token: TOKEN, ...over })
+  if (authz) bridge.setAuthz({ revision: authzRevision(true, authz), effective: true, allowed: authz, status: { configuredEnabled: true, confirmed: true, dshConfigured: true } })
+  return bridge
+}
 
 test('normalize rejects malformed input and caps text', () => {
   assert.throws(() => normalize(msg('bad id!')), /invalid ids/)
@@ -207,7 +212,7 @@ test('poll advances the cursor only after receive, and is restart-safe', async (
   const kv = new Map()
   const received = [], notified = []
   const client = { call: async path => ({ messages: bridge.store.inbound(Number(path.split('=')[1]), 100) }) }
-  const source = { config: () => ({}), state: { get: k => kv.get(k), set: (k, v) => kv.set(k, v) },
+  const source = { config: () => ({ confirmed: true }), configured: () => true, state: { get: k => kv.get(k), set: (k, v) => kv.set(k, v) },
     tickets: { open: () => [], get: () => undefined }, receive: async trigger => { received.push(trigger.id) }, notify: m => notified.push(m), report() {} }
   const registry = { policyPart: () => ({ allowed: [{ id: 'wxid_a' }] }), scope: () => ({ listened: true, observed: false }) }
   assert.equal(await pollOnce(source, client, registry), 2)
@@ -225,10 +230,11 @@ test('poll advances the cursor only after receive, and is restart-safe', async (
 test('an unlisted sender never reaches commands, and a disabled Source receives nothing', async () => {
   const t = dir()
   const bridge = open(t.file)
-  bridge.receive(msg('q1', { senderId: 'wxid_stranger', text: '/status' }))
+  // The Bridge itself drops unlisted senders; insert past it to prove the Source re-checks against live Policy.
+  bridge.store.addInbound(normalize(msg('q1', { senderId: 'wxid_stranger', text: '/status' })))
   const received = [], notified = []
   const client = { call: async () => ({ messages: bridge.store.inbound(0, 100) }) }
-  const source = { config: () => ({}), state: { get: () => 0, set() {} }, tickets: { open: () => [], get: () => undefined },
+  const source = { config: () => ({ confirmed: true }), configured: () => true, state: { get: () => 0, set() {} }, tickets: { open: () => [], get: () => undefined },
     receive: async trigger => received.push(trigger), notify: m => notified.push(m), report() {} }
   const registry = { policyPart: () => ({ allowed: [{ id: 'wxid_a' }] }), scope: () => ({ listened: true, observed: false }) }
   await pollOnce(source, client, registry)
