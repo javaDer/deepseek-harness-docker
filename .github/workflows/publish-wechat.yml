@@ -21,7 +21,7 @@ concurrency:
 
 env:
   GHCR_IMAGE: ghcr.io/javader/deepseek-harness
-  TAG: 0.2.2-rc.2-r3-superagent-wechat.1
+  TAG: 0.2.2-rc.2-r3-superagent-wechat.2
 
 jobs:
   platform:

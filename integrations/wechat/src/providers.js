@@ -5,6 +5,8 @@
  *   status() -> { connected: boolean, detail: string }
  *   stop() -> Promise<void>
  */
+import { IlinkProvider } from './ilink.js'
+
 export class ProviderError extends Error {
   constructor(message, retryable) { super(message); this.retryable = retryable }
 }
@@ -60,6 +62,7 @@ export class WechatyProvider {
 
 export function createProvider(env) {
   if ((env.WECHAT_PROVIDER ?? 'mock') === 'mock') return new MockProvider()
+  if (env.WECHAT_PROVIDER === 'ilink') return new IlinkProvider({ stateFile: (env.WECHAT_BRIDGE_DATA ?? '/data') + '/ilink.json', baseUrl: env.ILINK_BASE_URL })
   if (env.WECHAT_PROVIDER === 'wechaty') return new WechatyProvider({ name: env.WECHATY_NAME ?? 'dsh-wechat', puppet: env.WECHATY_PUPPET })
   throw new Error('Unknown WECHAT_PROVIDER: ' + env.WECHAT_PROVIDER)
 }
