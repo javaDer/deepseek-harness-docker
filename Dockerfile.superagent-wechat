@@ -2,7 +2,7 @@
 # Super Agent image plus the experimental WeChat Source plugin and WeChat Bridge.
 # One image, two containers: compose.wechat.yaml runs the Bridge separately with its own entrypoint,
 # volumes and no access to DSH state or the Docker socket.
-ARG SUPERAGENT_IMAGE=docker.io/runzhliu/deepseek-harness:0.2.2-rc.2-r3-superagent.1
+ARG SUPERAGENT_IMAGE=docker.io/runzhliu/deepseek-harness:0.2.2-rc.3-r1-superagent.1
 FROM ${SUPERAGENT_IMAGE}
 
 USER root
